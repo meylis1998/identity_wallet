@@ -1,0 +1,60 @@
+name: identity_wallet
+description: "Digital Identity Wallet - A privacy-preserving mobile identity solution demonstrating verifiable credentials, secure storage, and government-grade security."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State Management
+  flutter_bloc: ^9.1.1
+  bloc: ^9.1.0
+  equatable: ^2.0.5
+  get_it: ^9.2.0
+
+  # Navigation
+  go_router: ^17.0.1
+
+  # Security & Storage
+  flutter_secure_storage: ^10.0.0
+  local_auth: ^3.0.0
+  crypto: ^3.0.6
+  pointycastle: ^4.0.0
+
+  # QR Code
+  mobile_scanner: ^7.0.1
+  qr_flutter: ^4.1.0
+
+  # Data & Serialization
+  json_annotation: ^4.9.0
+  uuid: ^4.5.1
+  intl: ^0.20.2
+
+  # UI Components
+  flutter_svg: ^2.0.17
+  shimmer: ^3.0.0
+  animations: ^2.0.11
+
+  # Utilities
+  share_plus: ^12.0.1
+  url_launcher: ^6.3.1
+  path_provider: ^2.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.15
+  json_serializable: ^6.9.4
+  bloc_test: ^10.0.0
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
