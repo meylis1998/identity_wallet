@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/credential_repository.dart';
 import 'credential_event.dart';
@@ -32,11 +33,20 @@ class CredentialBloc extends Bloc<CredentialEvent, CredentialState> {
     AddCredential event,
     Emitter<CredentialState> emit,
   ) async {
+    debugPrint('[CredentialBloc] AddCredential event received');
+    debugPrint('[CredentialBloc] Credential ID: ${event.credential.id}');
+    debugPrint('[CredentialBloc] Credential Type: ${event.credential.displayName}');
+    debugPrint('[CredentialBloc] Issuer: ${event.credential.issuerName}');
+    debugPrint('[CredentialBloc] Claims count: ${event.credential.claims.length}');
     try {
       await _repository.addCredential(event.credential);
+      debugPrint('[CredentialBloc] Credential added to repository');
       final credentials = await _repository.getCredentials();
+      debugPrint('[CredentialBloc] Total credentials after add: ${credentials.length}');
       emit(CredentialLoaded(credentials));
+      debugPrint('[CredentialBloc] CredentialLoaded state emitted');
     } catch (e) {
+      debugPrint('[CredentialBloc] Error adding credential: $e');
       emit(CredentialError(e.toString()));
     }
   }

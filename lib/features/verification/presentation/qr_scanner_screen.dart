@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -16,18 +17,50 @@ class QRScannerScreen extends StatefulWidget {
 }
 
 class _QRScannerScreenState extends State<QRScannerScreen> {
-  final MobileScannerController _controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.normal,
-    facing: CameraFacing.back,
-    torchEnabled: false,
-  );
-
+  MobileScannerController? _controller;
   bool _isProcessing = false;
   String? _lastScannedCode;
+  String? _errorMessage;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+  }
+
+  Future<void> _initializeCamera() async {
+    debugPrint('[QRScanner] Initializing camera...');
+    try {
+      _controller = MobileScannerController(
+        detectionSpeed: DetectionSpeed.normal,
+        facing: CameraFacing.back,
+        torchEnabled: false,
+        autoStart: true,
+      );
+
+      debugPrint('[QRScanner] Controller created, waiting for widget build...');
+
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+          _errorMessage = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('[QRScanner] Camera initialization error: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Camera not available: $e';
+          _isInitialized = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -47,36 +80,56 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           style: TextStyle(color: Colors.white),
         ),
         actions: [
-          IconButton(
-            icon: ValueListenableBuilder(
-              valueListenable: _controller,
-              builder: (context, state, child) {
-                return Icon(
-                  state.torchState == TorchState.on
-                      ? Icons.flash_on
-                      : Icons.flash_off,
-                  color: Colors.white,
-                );
-              },
+          if (_controller != null && _isInitialized) ...[
+            IconButton(
+              icon: ValueListenableBuilder(
+                valueListenable: _controller!,
+                builder: (context, state, child) {
+                  return Icon(
+                    state.torchState == TorchState.on
+                        ? Icons.flash_on
+                        : Icons.flash_off,
+                    color: Colors.white,
+                  );
+                },
+              ),
+              onPressed: () => _controller?.toggleTorch(),
+              tooltip: 'Toggle flash',
             ),
-            onPressed: () => _controller.toggleTorch(),
-            tooltip: 'Toggle flash',
-          ),
-          IconButton(
-            icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
-            onPressed: () => _controller.switchCamera(),
-            tooltip: 'Switch camera',
-          ),
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+              onPressed: () => _controller?.switchCamera(),
+              tooltip: 'Switch camera',
+            ),
+          ],
         ],
       ),
       body: Stack(
         children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-          ),
+          if (_errorMessage != null)
+            _CameraErrorWidget(
+              errorMessage: _errorMessage!,
+              onDemoPressed: _showDemoOptions,
+            )
+          else if (_controller != null && _isInitialized)
+            MobileScanner(
+              controller: _controller!,
+              onDetect: _onDetect,
+              errorBuilder: (context, error) {
+                debugPrint('[QRScanner] MobileScanner error: $error');
+                return _CameraErrorWidget(
+                  errorMessage: 'Camera error: ${error.errorCode}',
+                  onDemoPressed: _showDemoOptions,
+                );
+              },
+            )
+          else
+            const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
 
-          _ScannerOverlay(isProcessing: _isProcessing),
+          if (_controller != null && _isInitialized)
+            _ScannerOverlay(isProcessing: _isProcessing),
 
           Positioned(
             bottom: 0,
@@ -205,8 +258,15 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   }
 
   Future<void> _handleCredentialOffer(Map<String, dynamic> json) async {
+    debugPrint('[QRScanner] _handleCredentialOffer called');
+    debugPrint('[QRScanner] JSON data: $json');
     try {
       final credential = VerifiableCredential.fromJson(json);
+      debugPrint('[QRScanner] Credential parsed successfully');
+      debugPrint('[QRScanner] Credential ID: ${credential.id}');
+      debugPrint('[QRScanner] Credential Type: ${credential.displayName}');
+      debugPrint('[QRScanner] Issuer: ${credential.issuerName}');
+      debugPrint('[QRScanner] Claims: ${credential.claims.map((c) => '${c.label}: ${c.value}').join(', ')}');
 
       final shouldAdd = await showDialog<bool>(
         context: context,
@@ -236,16 +296,22 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         ),
       );
 
+      debugPrint('[QRScanner] User response: shouldAdd = $shouldAdd');
+
       if (shouldAdd == true && mounted) {
+        debugPrint('[QRScanner] Adding credential to BLoC...');
         context.read<CredentialBloc>().add(AddCredential(credential));
+        debugPrint('[QRScanner] AddCredential event dispatched');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('${credential.displayName} added!')),
           );
+          debugPrint('[QRScanner] Snackbar shown, navigating back...');
           context.pop();
         }
       }
     } catch (e) {
+      debugPrint('[QRScanner] Error parsing credential: $e');
       _showError('Invalid credential format: $e');
     }
   }
@@ -325,19 +391,22 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     final demoCredential = {
       '@context': ['https://www.w3.org/2018/credentials/v1'],
       'type': ['VerifiableCredential', 'ProfessionalLicenseCredential'],
+      'id': 'urn:uuid:${DateTime.now().millisecondsSinceEpoch}',
       'issuer': 'did:web:dca.ca.gov',
       'issuerName': 'CA Dept. of Consumer Affairs',
       'issuerLogoUrl': '',
       'issuanceDate': DateTime.now().toIso8601String(),
       'expirationDate': DateTime.now().add(const Duration(days: 365)).toIso8601String(),
+      'holderDid': '',
       'claims': [
-        {'id': 'name', 'label': 'Name', 'value': 'Alex Johnson', 'required': true},
-        {'id': 'licenseType', 'label': 'License Type', 'value': 'Software Engineer', 'required': true},
-        {'id': 'licenseNumber', 'label': 'License #', 'value': 'SE-2024-78901'},
-        {'id': 'status', 'label': 'Status', 'value': 'Active'},
+        {'id': 'name', 'label': 'Name', 'value': 'Alex Johnson', 'required': true, 'sensitive': false},
+        {'id': 'licenseType', 'label': 'License Type', 'value': 'Software Engineer', 'required': true, 'sensitive': false},
+        {'id': 'licenseNumber', 'label': 'License #', 'value': 'SE-2024-78901', 'required': false, 'sensitive': false},
+        {'id': 'status', 'label': 'Status', 'value': 'Active', 'required': false, 'sensitive': false},
       ],
       'status': 'valid',
       'credentialType': 'custom',
+      'addedAt': DateTime.now().toIso8601String(),
     };
 
     _handleCredentialOffer(demoCredential);
@@ -352,6 +421,61 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     };
 
     _handleVerificationRequest(request);
+  }
+}
+
+class _CameraErrorWidget extends StatelessWidget {
+  final String errorMessage;
+  final VoidCallback onDemoPressed;
+
+  const _CameraErrorWidget({
+    required this.errorMessage,
+    required this.onDemoPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppTheme.spacingXl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.videocam_off,
+              size: 64,
+              color: Colors.white54,
+            ),
+            const SizedBox(height: AppTheme.spacingLg),
+            const Text(
+              'Camera Not Available',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: AppTheme.spacingSm),
+            Text(
+              errorMessage,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                color: Colors.white70,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppTheme.spacingLg),
+            ElevatedButton.icon(
+              onPressed: onDemoPressed,
+              icon: const Icon(Icons.science),
+              label: const Text('Use Demo Mode'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

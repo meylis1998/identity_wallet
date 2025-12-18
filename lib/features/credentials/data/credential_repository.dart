@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/services/secure_storage_service.dart';
 import '../../../core/constants/app_constants.dart';
@@ -10,16 +11,23 @@ class CredentialRepository {
   CredentialRepository(this._storage);
 
   Future<List<VerifiableCredential>> getCredentials() async {
+    debugPrint('[CredentialRepository] getCredentials called');
     final jsonList = await _storage.getCredentials();
+    debugPrint('[CredentialRepository] Retrieved ${jsonList.length} credentials from storage');
     return jsonList.map((json) => VerifiableCredential.fromJson(json)).toList();
   }
 
   Future<void> addCredential(VerifiableCredential credential) async {
+    debugPrint('[CredentialRepository] addCredential called');
+    debugPrint('[CredentialRepository] Adding: ${credential.displayName} (ID: ${credential.id})');
     final credentials = await getCredentials();
+    debugPrint('[CredentialRepository] Current credentials count: ${credentials.length}');
     credentials.add(credential);
+    debugPrint('[CredentialRepository] New credentials count: ${credentials.length}');
     await _storage.storeCredentials(
       credentials.map((c) => c.toJson()).toList(),
     );
+    debugPrint('[CredentialRepository] Credentials stored to secure storage');
   }
 
   Future<void> removeCredential(String id) async {
